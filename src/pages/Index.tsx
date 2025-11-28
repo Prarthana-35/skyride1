@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Location, TaxiTier, Booking } from '@/types/booking';
 import { calculateDistance, calculateFare, calculateFlightDuration, generateTaxiId, TAXI_TIERS } from '@/lib/taxi-config';
+import { saveBooking } from '@/integrations/supabase/bookings';
 import { MapPin, Navigation, History, Plane } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -61,7 +62,7 @@ const Index = () => {
     setStep('details');
   };
 
-  const handleBookingSubmit = (name: string, phone: string) => {
+  const handleBookingSubmit = async (name: string, phone: string) => {
     if (!startLocation || !endLocation) return;
 
     const tierConfig = TAXI_TIERS.find(t => t.id === selectedTier)!;
@@ -83,10 +84,17 @@ const Index = () => {
       userPhone: phone
     };
 
-    // Save to localStorage
+    // Save to localStorage (backup)
     const bookings = JSON.parse(localStorage.getItem('bookings') || '[]');
     bookings.push(booking);
     localStorage.setItem('bookings', JSON.stringify(bookings));
+
+    // Save to Supabase database
+    const { success, error } = await saveBooking(booking);
+    if (!success) {
+      console.error('Failed to save booking to database:', error);
+      toast.error('Booking saved locally but failed to sync. Check your connection.');
+    }
 
     setCurrentBooking(booking);
     setStep('tracking');
