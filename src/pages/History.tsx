@@ -3,17 +3,37 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Booking } from '@/types/booking';
-import { ArrowLeft, MapPin, Calendar, CreditCard } from 'lucide-react';
+import { fetchAllBookings } from '@/integrations/supabase/bookings';
+import { ArrowLeft, MapPin, Calendar, CreditCard, Loader } from 'lucide-react';
 
 const History = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const savedBookings = JSON.parse(localStorage.getItem('bookings') || '[]');
-    // Sort by timestamp, most recent first
-    const sortedBookings = savedBookings.sort((a: Booking, b: Booking) => b.timestamp - a.timestamp);
-    setBookings(sortedBookings.slice(0, 5)); // Show last 5 bookings
+    const loadBookings = async () => {
+      setLoading(true);
+      setError(null);
+      
+      // Try to fetch from database
+      const { bookings: dbBookings, error: dbError } = await fetchAllBookings(50);
+      
+      if (dbError) {
+        console.warn('Failed to fetch from database, using localStorage:', dbError);
+        // Fallback to localStorage
+        const savedBookings = JSON.parse(localStorage.getItem('bookings') || '[]');
+        const sortedBookings = savedBookings.sort((a: Booking, b: Booking) => b.timestamp - a.timestamp);
+        setBookings(sortedBookings.slice(0, 10));
+      } else {
+        setBookings(dbBookings.slice(0, 10));
+      }
+      
+      setLoading(false);
+    };
+
+    loadBookings();
   }, []);
 
   const getStatusColor = (status: string) => {
@@ -37,7 +57,14 @@ const History = () => {
           <h1 className="text-3xl font-bold text-foreground">Booking History</h1>
         </div>
 
-        {bookings.length === 0 ? (
+        {loading ? (
+          <Card className="p-12 text-center shadow-elevated">
+            <div className="flex justify-center mb-4">
+              <Loader className="w-8 h-8 animate-spin text-primary" />
+            </div>
+            <p className="text-muted-foreground">Loading your bookings...</p>
+          </Card>
+        ) : bookings.length === 0 ? (
           <Card className="p-12 text-center shadow-elevated">
             <div className="text-6xl mb-4">✈️</div>
             <h2 className="text-xl font-semibold text-foreground mb-2">
@@ -59,7 +86,7 @@ const History = () => {
                       <div className="flex-1">
                         <p className="text-sm text-muted-foreground">From</p>
                         <p className="font-medium text-foreground">
-                          {booking.startLocation.lat.toFixed(4)}, {booking.startLocation.lng.toFixed(4)}
+                          {booking.startLocation.address || `${booking.startLocation.lat.toFixed(4)}, ${booking.startLocation.lng.toFixed(4)}`}
                         </p>
                       </div>
                     </div>
@@ -68,7 +95,7 @@ const History = () => {
                       <div className="flex-1">
                         <p className="text-sm text-muted-foreground">To</p>
                         <p className="font-medium text-foreground">
-                          {booking.endLocation.lat.toFixed(4)}, {booking.endLocation.lng.toFixed(4)}
+                          {booking.endLocation.address || `${booking.endLocation.lat.toFixed(4)}, ${booking.endLocation.lng.toFixed(4)}`}
                         </p>
                       </div>
                     </div>
@@ -91,11 +118,16 @@ const History = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
-                  <div className="flex gap-4 text-sm text-muted-foreground">
-                    <span>Distance: {booking.distance.toFixed(1)} km</span>
-                    <span>Tier: {booking.tier.charAt(0).toUpperCase() + booking.tier.slice(1)}</span>
-                    {booking.taxiId && <span>Taxi: {booking.taxiId}</span>}
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>Distance: {booking.distance.toFixed(1)} km</span>
+                      <span>Tier: {booking.tier.charAt(0).toUpperCase() + booking.tier.slice(1)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      {booking.userName && <span>Passenger: {booking.userName}</span>}
+                      {booking.taxiId && <span>Taxi: {booking.taxiId}</span>}
+                    </div>
                   </div>
                 </div>
               </Card>
